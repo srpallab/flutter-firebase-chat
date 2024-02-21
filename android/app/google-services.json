@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "752023303740",
+    "project_id": "jann-pakhi-chat",
+    "storage_bucket": "jann-pakhi-chat.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:752023303740:android:5cd6658cbc9d7f5e0a7539",
+        "android_client_info": {
+          "package_name": "com.srpallab.jaan_pakhi_chat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBC5Wf_gJON-udOO0BAWx-M9p5DSCx-fN4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
