@@ -1,9 +1,13 @@
 import 'dart:developer';
+import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../core/values/images.dart';
+import '../widgets/image_picker.dart';
 
 final _firebaseAuth = FirebaseAuth.instance;
 
@@ -17,20 +21,33 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final formKey = GlobalKey<FormState>();
   bool isLogin = true;
+  bool isLoading = false;
+  String enteredUsername = '';
   String enteredEmail = '';
   String enteredPassword = '';
+  File? pickedImageFile;
 
   Future<void> submit() async {
+    setState(() {
+      isLoading = true;
+    });
     final valid = formKey.currentState!.validate();
-    if (!valid) return;
+    if (!valid || (!isLogin && pickedImageFile == null)) {
+      setState(() {
+        isLoading = false;
+      });
+      return;
+    }
+    ;
     formKey.currentState!.save();
     try {
+      log(enteredEmail);
       if (isLogin) {
         final UserCredential userCredential =
             await _firebaseAuth.signInWithEmailAndPassword(
-                email: enteredEmail, password: enteredPassword);
-        log(enteredEmail);
-        log(enteredPassword);
+          email: enteredEmail,
+          password: enteredPassword,
+        );
         log(userCredential.toString());
       } else {
         final UserCredential userCredential =
@@ -38,18 +55,38 @@ class _AuthScreenState extends State<AuthScreen> {
           email: enteredEmail,
           password: enteredPassword,
         );
-        log(enteredEmail);
-        log(enteredPassword);
-        log(userCredential.toString());
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child("user_images")
+            .child("${userCredential.user!.uid}.jpg");
+        await storageRef.putFile(pickedImageFile!);
+        final String imageUrl = await storageRef.getDownloadURL();
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .set(
+          {
+            'username': enteredUsername,
+            'email': enteredEmail,
+            'image_url': imageUrl,
+          },
+        );
       }
     } on FirebaseAuthException catch (error) {
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.message ?? "Authentication Failed"),
-        ),
-      );
+      snackMessage(error);
+      setState(() {
+        isLoading = false;
+      });
     }
+  }
+
+  void snackMessage(FirebaseAuthException error) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error.message ?? "Authentication Failed"),
+      ),
+    );
   }
 
   @override
@@ -70,38 +107,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
                 child: Image.asset(JannImages.chatImage, height: 130),
               ),
-              Card(
-                margin: const EdgeInsets.all(20),
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Form(
-                      key: formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          emailField(),
-                          passwordField(),
-                          const SizedBox(height: 12),
-                          submitBtn(context),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                isLogin = !isLogin;
-                              });
-                            },
-                            child: Text(
-                              isLogin
-                                  ? "Create an account."
-                                  : "Already have an account.",
-                            ),
-                          )
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              formSection(context),
             ],
           ),
         ),
@@ -109,14 +115,76 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  ElevatedButton submitBtn(BuildContext context) {
-    return ElevatedButton(
-      onPressed: submit,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+  Card formSection(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.all(20),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!isLogin)
+                  AppImagePicker(
+                    onImagePicked: (imageFile) {
+                      pickedImageFile = imageFile;
+                    },
+                  ),
+                if (!isLogin) usernameField(),
+                emailField(),
+                passwordField(),
+                const SizedBox(height: 12),
+                submitBtn(context),
+                if (!isLoading) toggleBtn()
+              ],
+            ),
+          ),
+        ),
       ),
-      child: Text(isLogin ? "LOGIN" : "SIGNUP"),
     );
+  }
+
+  TextFormField usernameField() {
+    return TextFormField(
+      decoration: const InputDecoration(labelText: 'Username'),
+      keyboardType: TextInputType.name,
+      autocorrect: false,
+      textCapitalization: TextCapitalization.none,
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return "Please Enter a Valid User Name.";
+        }
+        return null;
+      },
+      onSaved: (value) => enteredUsername = value!,
+    );
+  }
+
+  TextButton toggleBtn() {
+    return TextButton(
+      onPressed: () {
+        setState(() {
+          isLogin = !isLogin;
+        });
+      },
+      child: Text(
+        isLogin ? "Create an account." : "Already have an account.",
+      ),
+    );
+  }
+
+  Widget submitBtn(BuildContext context) {
+    return isLoading
+        ? const CircularProgressIndicator()
+        : ElevatedButton(
+            onPressed: submit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+            ),
+            child: Text(isLogin ? "LOGIN" : "SIGNUP"),
+          );
   }
 
   TextFormField passwordField() {
